@@ -1,58 +1,59 @@
 const pool = require("../db");
-const dijkstra = require("./dijkstra");
+
+let edgeCache = new Map();
+let nodeCache = new Map();
+
+async function loadGraphIntoMemory(cityId) {
+  console.log(`Loading graph for city ${cityId} into RAM...`);
+  const start = Date.now();
+
+  try {
+    const edgeRes = await pool.query(
+      "SELECT from_node, to_node, distance FROM edges WHERE city_id = $1",
+      [cityId],
+    );
+
+    edgeRes.rows.forEach((e) => {
+      if (!edgeCache.has(e.from_node)) edgeCache.set(e.from_node, []);
+      edgeCache
+        .get(e.from_node)
+        .push({ id: e.to_node, distance: parseFloat(e.distance) });
+    });
+
+    const nodeRes = await pool.query(
+      "SELECT id, lat, lon FROM nodes WHERE city_id = $1",
+      [cityId],
+    );
+
+    nodeRes.rows.forEach((n) => {
+      nodeCache.set(n.id, { lat: parseFloat(n.lat), lon: parseFloat(n.lon) });
+    });
+
+    const end = Date.now();
+    console.log(
+      `Graph Loaded: ${nodeCache.size} nodes, ${edgeRes.rowCount} edges in ${end - start}ms`,
+    );
+  } catch (err) {
+    console.error("Failed to load graph into memory:", err.message);
+  }
+}
 
 async function getNearestNode(cityId, lat, lon) {
   const query = `
-        SELECT id, lat, lon
-        FROM nodes
-        WHERE city_id = $1
-        ORDER BY ((lat- $2)^2 + (lon - $3)^2) ASC
+        SELECT id FROM nodes 
+        WHERE city_id = $1 
+        AND lat BETWEEN $2 - 0.05 AND $2 + 0.05 
+        AND lon BETWEEN $3 - 0.05 AND $3 + 0.05
+        ORDER BY ((lat - $2)^2 + (lon - $3)^2) ASC 
         LIMIT 1
         `;
   const { rows } = await pool.query(query, [cityId, lat, lon]);
-  return rows[0];
-}
-
-async function getNeighbors(cityId, nodeId) {
-  const query = `
-        SELECT to_node AS id, distance
-        FROM edges
-        WHERE city_id = $1 AND from_node = $2
-        `;
-  const { rows } = await pool.query(query, [cityId, nodeId]);
-  return rows;
-}
-
-async function getNodesByIds(nodeIds) {
-  const query = `
-        SELECT id, lat, lon
-        FROM nodes
-        WHERE id = ANY($1)
-        `;
-  const { rows } = await pool.query(query, [nodeIds]);
-  const map = {};
-  rows.forEach((row) => {
-    map[row.id] = row;
-  });
-
-  return nodeIds.map((id) => map[id]);
-}
-
-async function computePath(cityId, startLat, startLon, endLat, endLon) {
-  const startNode = await getNearestNode(cityId, startLat, startLon);
-  const endNode = await getNearestNode(cityId, endLat, endLon);
-
-  const { path, distance } = await dijkstra(
-    cityId,
-    startNode.id,
-    endNode.id,
-    getNeighbors,
-  );
-
-  const nodeCoords = await getNodesByIds(path);
-  return { distance, path: nodeCoords };
+  return rows.length > 0 ? rows[0].id : null;
 }
 
 module.exports = {
-  computePath,
+  loadGraphIntoMemory,
+  getNearestNode,
+  edgeCache,
+  nodeCache,
 };
