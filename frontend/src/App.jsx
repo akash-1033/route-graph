@@ -64,7 +64,8 @@ export default function App() {
   const fetchPath = async () => {
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:3000/api/path", {
+      const baseUrl = import.meta.env.VITE_API_URL;
+      const response = await fetch(`${baseUrl}/api/path`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
