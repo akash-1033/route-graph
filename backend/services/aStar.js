@@ -27,7 +27,6 @@ module.exports = async function aStar(startId, endId) {
 
   while (pq.size() > 0) {
     const { id: currentId } = pq.pop();
-
     if (currentId === endId) break;
 
     const neighbors = edgeCache.get(currentId) || [];
@@ -35,13 +34,15 @@ module.exports = async function aStar(startId, endId) {
       const newDist = distances.get(currentId) + neighbor.distance;
 
       if (!distances.has(neighbor.id) || newDist < distances.get(neighbor.id)) {
+        const neighborData = nodeCache.get(neighbor.id);
+        if (!neighborData) continue;
+
         distances.set(neighbor.id, newDist);
         previous.set(neighbor.id, currentId);
 
-        // f(n) = g(n) + h(n)
         const h = haversine(
-          nodeCache.get(neighbor.id).lat,
-          nodeCache.get(neighbor.id).lon,
+          neighborData.lat,
+          neighborData.lon,
           endNode.lat,
           endNode.lon,
         );
@@ -50,17 +51,22 @@ module.exports = async function aStar(startId, endId) {
     }
   }
 
+  if (!distances.has(endId)) return { path: [], distance: 0 };
+
   let path = [];
   let curr = endId;
   while (curr) {
     const coords = nodeCache.get(curr);
+    if (!coords) break;
     path.push({ id: curr, ...coords });
+    if (curr === startId) break;
     curr = previous.get(curr);
   }
+
   const endTimer = performance.now();
   console.log(`Pure Search Time: ${(endTimer - startTimer).toFixed(2)}ms`);
   return {
     path: path.reverse(),
-    distance: distances.get(endId) || 0,
+    distance: parseFloat(distances.get(endId).toFixed(2)),
   };
 };

@@ -6,8 +6,9 @@ exports.findPath = async (req, res) => {
     const { cityId, start, end } = req.body;
 
     if (!cityId || !start || !end) {
-      return res.status(400).json({ error: "Missing parameters" });
+      return res.status(400).json({ message: "Missing required parameters" });
     }
+
     const startId = await graphService.getNearestNode(
       cityId,
       start.lat,
@@ -18,12 +19,19 @@ exports.findPath = async (req, res) => {
     if (!startId || !endId) {
       return res
         .status(404)
-        .json({ error: "Start or End location outside of road network." });
+        .json({ message: "Location outside of road network." });
     }
 
     const results = await aStar(startId, endId);
+
+    if (!results.path || results.path.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No path found between these points." });
+    }
+
     res.json(results);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ message: err.message });
   }
 };
