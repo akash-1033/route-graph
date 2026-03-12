@@ -43,6 +43,7 @@ export default function App() {
   const [path, setPath] = useState([]);
   const [distance, setDistance] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [isWakingUp, setIsWakingUp] = useState(false); // New state for cold start
 
   useEffect(() => {
     if (points.start && points.end) fetchPath();
@@ -50,6 +51,9 @@ export default function App() {
 
   const fetchPath = async () => {
     setLoading(true);
+    // Timer to detect if server is sleeping (Render free tier)
+    const wakeUpTimer = setTimeout(() => setIsWakingUp(true), 3000);
+
     try {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/api/path`, {
         method: "POST",
@@ -60,6 +64,10 @@ export default function App() {
           end: { lat: points.end.lat, lon: points.end.lng },
         }),
       });
+
+      clearTimeout(wakeUpTimer);
+      setIsWakingUp(false);
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Error fetching path");
 
@@ -67,6 +75,8 @@ export default function App() {
       setDistance((data.distance / 1000).toFixed(2));
       toast.success("Path found!");
     } catch (err) {
+      clearTimeout(wakeUpTimer);
+      setIsWakingUp(false);
       toast.error(err.message);
       setPath([]);
     } finally {
@@ -76,7 +86,8 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen font-sans text-slate-900 overflow-hidden">
-      <Toaster position="top-center" />
+      <Toaster position="top-center" reverseOrder={false} />
+
       <header className="bg-white border-b px-8 py-4 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-3">
           <div className="bg-blue-600 p-2 rounded-lg">
@@ -113,11 +124,15 @@ export default function App() {
       <main className="flex-1 p-6 bg-slate-50 flex flex-col gap-4">
         <div className="bg-white rounded-xl p-4 shadow-sm border flex items-center justify-between">
           <p className="text-sm font-medium">
-            {!points.start
-              ? "Select start"
-              : !points.end
-                ? "Select destination"
-                : "Route Optimized!"}
+            {loading
+              ? isWakingUp
+                ? "Server is waking up (Render Free Tier)..."
+                : "Calculating A* Path..."
+              : !points.start
+                ? "Select start"
+                : !points.end
+                  ? "Select destination"
+                  : "Route Optimized!"}
           </p>
           {loading && (
             <Loader2 className="animate-spin text-blue-600" size={18} />
